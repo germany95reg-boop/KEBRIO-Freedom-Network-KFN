@@ -12,6 +12,7 @@ android {
  kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
+ testImplementation("junit:junit:4.13.2")
  implementation("com.wireguard.android:tunnel:1.0.20230706")
  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
  implementation(platform("androidx.compose:compose-bom:2024.12.01"))
