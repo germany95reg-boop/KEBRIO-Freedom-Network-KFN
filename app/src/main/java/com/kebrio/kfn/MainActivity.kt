@@ -92,9 +92,13 @@ class MainActivity : ComponentActivity() {
     val traffic by controller.traffic.collectAsState()
     val adaptive by controller.adaptive.collectAsState()
     val health by controller.health.collectAsState()
+    var pendingConfig by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-     if (VpnService.prepare(this@MainActivity) == null && config.isNotBlank()) {
-      controller.connect(config, excluded); config = ""
+     val pending = pendingConfig
+     pendingConfig = null
+     if (it.resultCode == android.app.Activity.RESULT_OK && VpnService.prepare(this@MainActivity) == null && pending != null) {
+      controller.connect(pending.first, pending.second)
+      if (config == pending.first) config = ""
      }
     }
     Surface(Modifier.fillMaxSize()) {
@@ -144,8 +148,11 @@ class MainActivity : ComponentActivity() {
         if (vaultMessage.isNotEmpty()) Text(vaultMessage)
         Button(onClick = {
          val intent = VpnService.prepare(this@MainActivity)
-         if (intent == null) { controller.connect(config, excluded); config = "" } else launcher.launch(intent)
-        }, enabled = detected == Protocol.WIREGUARD && !status.startsWith("Tunnel up") && status != "Starting tunnel") { Text("Connect") }
+         if (intent == null) { controller.connect(config, excluded); config = "" } else {
+          pendingConfig = config to excluded.toSet()
+          launcher.launch(intent)
+         }
+        }, enabled = pendingConfig == null && detected == Protocol.WIREGUARD && !status.startsWith("Tunnel up") && status != "Starting tunnel") { Text("Connect") }
         OutlinedButton(onClick = { controller.disconnect() }) { Text("Disconnect") }
        }
       }
