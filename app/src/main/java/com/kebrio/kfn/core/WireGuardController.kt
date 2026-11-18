@@ -43,13 +43,22 @@ class WireGuardController private constructor(context: Context) {
    }
   }
  }
- fun connect(raw: String) {
+ fun connect(raw: String, excludedPackages: Set<String> = emptySet()) {
   scope.launch { lock.withLock {
    try {
     if (backend.getState(tunnel) == Tunnel.State.UP) return@withLock
     _status.value = "Starting tunnel"
     require(raw.length in 1..65536)
-    val config = Config.parse(raw.byteInputStream(Charsets.UTF_8))
+    val effective = if (excludedPackages.isEmpty()) raw else {
+     require(excludedPackages.all { it.matches(Regex("[A-Za-z0-9_.]+")) })
+     val lines = raw.lines().toMutableList()
+     require(lines.none { it.substringBefore('=').trim().equals("IncludedApplications", true) || it.substringBefore('=').trim().equals("ExcludedApplications", true) }) { "Existing application policy" }
+     val index = lines.indexOfFirst { it.trim().equals("[Interface]", true) }
+     require(index >= 0)
+     lines.add(index + 1, "ExcludedApplications = " + excludedPackages.sorted().joinToString(", "))
+     lines.joinToString("\n")
+    }
+    val config = Config.parse(effective.byteInputStream(Charsets.UTF_8))
     val state = backend.setState(tunnel, Tunnel.State.UP, config)
     _status.value = if (state == Tunnel.State.UP) "Tunnel up — remote handshake not verified" else "Tunnel did not start"
    } catch (e: Exception) {

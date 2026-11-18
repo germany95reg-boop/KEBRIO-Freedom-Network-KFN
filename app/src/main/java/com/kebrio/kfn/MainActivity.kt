@@ -38,6 +38,16 @@ class MainActivity : ComponentActivity() {
    MaterialTheme(colorScheme = darkColorScheme()) {
     var network by remember { mutableStateOf(checkNetwork()) }
     var config by remember { mutableStateOf("") }
+    var excluded by remember { mutableStateOf(setOf<String>()) }
+    val apps = remember {
+     val query = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+     packageManager.queryIntentActivities(query, 0)
+      .filter { it.activityInfo.packageName != packageName }
+      .distinctBy { it.activityInfo.packageName }
+      .map { it.loadLabel(packageManager).toString() to it.activityInfo.packageName }
+      .sortedBy { it.first.lowercase() }
+    }
+    var showApps by remember { mutableStateOf(false) }
     var importError by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     var vaultBusy by remember { mutableStateOf(false) }
@@ -80,7 +90,7 @@ class MainActivity : ComponentActivity() {
     val traffic by controller.traffic.collectAsState()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
      if (VpnService.prepare(this@MainActivity) == null && config.isNotBlank()) {
-      controller.connect(config); config = ""
+      controller.connect(config, excluded); config = ""
      }
     }
     Surface(Modifier.fillMaxSize()) {
@@ -125,7 +135,7 @@ class MainActivity : ComponentActivity() {
         if (vaultMessage.isNotEmpty()) Text(vaultMessage)
         Button(onClick = {
          val intent = VpnService.prepare(this@MainActivity)
-         if (intent == null) { controller.connect(config); config = "" } else launcher.launch(intent)
+         if (intent == null) { controller.connect(config, excluded); config = "" } else launcher.launch(intent)
         }, enabled = config.isNotBlank() && !status.startsWith("Tunnel up") && status != "Starting tunnel") { Text("Connect") }
         OutlinedButton(onClick = { controller.disconnect() }) { Text("Disconnect") }
        }
@@ -148,7 +158,21 @@ class MainActivity : ComponentActivity() {
         Text("Lockdown status is not verified by KFN.")
        }
       }
-      Text("Development build · 0.2.4")
+      ElevatedCard(Modifier.fillMaxWidth()) {
+       Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("KFN Split", style = MaterialTheme.typography.titleLarge)
+        Text("Selected apps bypass VPN on the next connection. Android lockdown may block their traffic.")
+        Text("Excluded: " + excluded.size)
+        OutlinedButton(onClick = { showApps = !showApps }) { Text(if (showApps) "Hide apps" else "Choose apps") }
+        if (showApps) apps.forEach { (label, pkg) ->
+         Row(verticalAlignment = Alignment.CenterVertically) {
+          Checkbox(checked = pkg in excluded, onCheckedChange = { checked -> excluded = if (checked) excluded + pkg else excluded - pkg })
+          Column { Text(label); Text(pkg, style = MaterialTheme.typography.labelSmall) }
+         }
+        }
+       }
+      }
+      Text("Development build · 0.2.5")
      }
     }
    }
