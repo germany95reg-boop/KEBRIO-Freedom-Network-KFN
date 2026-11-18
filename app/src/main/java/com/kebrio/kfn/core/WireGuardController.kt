@@ -79,6 +79,9 @@ class WireGuardController private constructor(context: Context) {
   scope.launch { lock.withLock {
    try {
     if (backend.getState(tunnel) == Tunnel.State.UP) return@withLock
+    activeConfig = null
+    _traffic.value = null
+    _health.value = "Starting tunnel"
     _status.value = "Starting tunnel"
     require(raw.toByteArray(Charsets.UTF_8).size in 1..65536)
     require(ConfigProtocol.detect(raw) == Protocol.WIREGUARD)
@@ -102,6 +105,7 @@ class WireGuardController private constructor(context: Context) {
     activeConfig = null
     retryCount = 0
     retryAt = 0L
+    _health.value = "Connection failed"
     _health.value = "Connection failed"
     _status.value = "Connection failed — check configuration and VPN permission"
    }
