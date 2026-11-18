@@ -23,18 +23,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kebrio.kfn.core.WireGuardController
+import com.kebrio.kfn.core.ProfileVault
+import com.wireguard.config.Config
 
 class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
   val controller = WireGuardController.get(this)
+  val vault = ProfileVault(applicationContext)
   setContent {
    MaterialTheme(colorScheme = darkColorScheme()) {
     var network by remember { mutableStateOf(checkNetwork()) }
     var config by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    var vaultBusy by remember { mutableStateOf(false) }
+    var vaultMessage by remember { mutableStateOf("") }
+    fun vaultAction(action: suspend () -> String) {
+     vaultBusy = true
+     scope.launch {
+      try { vaultMessage = action() }
+      catch (e: Exception) {
+       if (e is kotlinx.coroutines.CancellationException) throw e
+       vaultMessage = "Profile operation failed"
+      } finally { vaultBusy = false }
+     }
+    }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
      if (uri != null) scope.launch {
       try {
@@ -73,10 +88,35 @@ class MainActivity : ComponentActivity() {
        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("WireGuard", style = MaterialTheme.typography.headlineSmall)
         Text(status)
-        Text("Import or paste a configuration from your trusted VPN server. Keys are not saved by KFN.")
+        Text("Import or paste a configuration from your trusted VPN server. Keys are stored only if you explicitly save a profile.")
         OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }) { Text("Import .conf") }
         if (importError.isNotEmpty()) Text(importError, color = MaterialTheme.colorScheme.error)
         OutlinedTextField(value = config, onValueChange = { if (it.length <= 65536) config = it }, label = { Text("WireGuard configuration") }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6, visualTransformation = PasswordVisualTransformation())
+        Text("Encrypted local profile")
+        OutlinedButton(enabled = !vaultBusy && config.isNotBlank(), onClick = {
+         val snapshot = config
+         vaultAction {
+          withContext(Dispatchers.IO) {
+           Config.parse(snapshot.byteInputStream(Charsets.UTF_8))
+           vault.save(snapshot)
+          }
+          "Profile saved securely"
+         }
+        }) { Text("Save profile") }
+        OutlinedButton(enabled = !vaultBusy, onClick = {
+         vaultAction {
+          val saved = withContext(Dispatchers.IO) { vault.load() }
+          if (saved == null) "No saved profile" else { config = saved; "Profile loaded" }
+         }
+        }) { Text("Load profile") }
+        OutlinedButton(enabled = !vaultBusy, onClick = {
+         vaultAction {
+          withContext(Dispatchers.IO) { vault.delete() }
+          config = ""
+          "Saved profile deleted"
+         }
+        }) { Text("Delete saved profile") }
+        if (vaultMessage.isNotEmpty()) Text(vaultMessage)
         Button(onClick = {
          val intent = VpnService.prepare(this@MainActivity)
          if (intent == null) { controller.connect(config); config = "" } else launcher.launch(intent)
@@ -91,7 +131,7 @@ class MainActivity : ComponentActivity() {
         OutlinedButton(onClick = { network = checkNetwork() }) { Text("Refresh") }
        }
       }
-      Text("Development build · 0.2.1")
+      Text("Development build · 0.2.2")
      }
     }
    }
