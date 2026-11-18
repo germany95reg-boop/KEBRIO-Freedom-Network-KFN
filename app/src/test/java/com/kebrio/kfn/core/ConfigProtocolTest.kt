@@ -27,6 +27,12 @@ class ConfigProtocolTest {
   assertNull(ConfigProtocol.detect("vless://" + "a".repeat(65536)))
   assertNull(ConfigProtocol.detect("[Interface]\n#" + "я".repeat(32768)))
  }
+ @Test fun utf8Bom() {
+  assertEquals(Protocol.WIREGUARD, ConfigProtocol.detect("\uFEFF[Interface]\n[Peer]"))
+ }
+ @Test fun oversizedInput() {
+  assertNull(ConfigProtocol.detect("[Interface]\n" + "x".repeat(65536)))
+ }
  @Test fun unknown() {
   assertNull(ConfigProtocol.detect(""))
   assertNull(ConfigProtocol.detect("https://example.invalid"))
