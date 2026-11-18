@@ -80,6 +80,7 @@ class WireGuardController private constructor(context: Context) {
     if (backend.getState(tunnel) == Tunnel.State.UP) return@withLock
     _status.value = "Starting tunnel"
     require(raw.length in 1..65536)
+    require(ConfigProtocol.detect(raw) == Protocol.WIREGUARD)
     val effective = if (excludedPackages.isEmpty()) raw else {
      require(excludedPackages.all { it.matches(Regex("[A-Za-z0-9_.]+")) })
      val lines = raw.lines().toMutableList()

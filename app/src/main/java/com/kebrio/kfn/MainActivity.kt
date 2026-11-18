@@ -26,6 +26,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.kebrio.kfn.core.WireGuardController
 import com.kebrio.kfn.core.ProfileVault
+import com.kebrio.kfn.core.ConfigProtocol
+import com.kebrio.kfn.core.Protocol
 import com.wireguard.config.Config
 
 class MainActivity : ComponentActivity() {
@@ -101,7 +103,12 @@ class MainActivity : ComponentActivity() {
       Text("FREEDOM NETWORK", style = MaterialTheme.typography.labelLarge)
       ElevatedCard(Modifier.fillMaxWidth()) {
        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("WireGuard", style = MaterialTheme.typography.headlineSmall)
+        Text("VPN protocols", style = MaterialTheme.typography.headlineSmall)
+        Text("WireGuard — available")
+        Text("AmneziaWG, VLESS, Shadowsocks — engines not installed")
+        val detected = remember(config) { ConfigProtocol.detect(config) }
+        if (config.isNotBlank()) Text("Detected: " + (detected?.name ?: "Unknown configuration"))
+        if (detected != null && detected != Protocol.WIREGUARD) Text("This protocol is not supported by the current build.", color = MaterialTheme.colorScheme.error)
         Text(status)
         Text("Tunnel traffic", style = MaterialTheme.typography.titleMedium)
         Text("Received: " + (traffic?.received?.let { android.text.format.Formatter.formatShortFileSize(this@MainActivity, it) } ?: "—"))
@@ -111,7 +118,7 @@ class MainActivity : ComponentActivity() {
         if (importError.isNotEmpty()) Text(importError, color = MaterialTheme.colorScheme.error)
         OutlinedTextField(value = config, onValueChange = { if (it.length <= 65536) config = it }, label = { Text("WireGuard configuration") }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6, visualTransformation = PasswordVisualTransformation())
         Text("Encrypted local profile")
-        OutlinedButton(enabled = !vaultBusy && config.isNotBlank(), onClick = {
+        OutlinedButton(enabled = !vaultBusy && detected == Protocol.WIREGUARD, onClick = {
          val snapshot = config
          vaultAction {
           withContext(Dispatchers.IO) {
@@ -138,7 +145,7 @@ class MainActivity : ComponentActivity() {
         Button(onClick = {
          val intent = VpnService.prepare(this@MainActivity)
          if (intent == null) { controller.connect(config, excluded); config = "" } else launcher.launch(intent)
-        }, enabled = config.isNotBlank() && !status.startsWith("Tunnel up") && status != "Starting tunnel") { Text("Connect") }
+        }, enabled = detected == Protocol.WIREGUARD && !status.startsWith("Tunnel up") && status != "Starting tunnel") { Text("Connect") }
         OutlinedButton(onClick = { controller.disconnect() }) { Text("Disconnect") }
        }
       }
@@ -185,7 +192,7 @@ class MainActivity : ComponentActivity() {
         Text("Optional recovery while KFN process is alive. Does not verify remote handshake or guarantee leak protection.")
        }
       }
-      Text("Development build · 0.2.6")
+      Text("Development build · 0.2.7")
      }
     }
    }
