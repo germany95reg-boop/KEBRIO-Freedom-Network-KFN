@@ -1,6 +1,8 @@
 package com.kebrio.kfn
 
 import android.os.Bundle
+import android.content.Intent
+import android.provider.Settings
 import android.view.WindowManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -135,7 +137,18 @@ class MainActivity : ComponentActivity() {
         OutlinedButton(onClick = { network = checkNetwork() }) { Text("Refresh") }
        }
       }
-      Text("Development build · 0.2.3")
+      ElevatedCard(Modifier.fillMaxWidth()) {
+       Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("KFN Shield", style = MaterialTheme.typography.titleLarge)
+        Text("Android can block connections outside an always-on VPN. Configure this in system VPN settings if available for KFN.")
+        OutlinedButton(onClick = {
+         try { startActivity(Intent(Settings.ACTION_VPN_SETTINGS)) }
+         catch (e: android.content.ActivityNotFoundException) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+        }) { Text("Open Android VPN settings") }
+        Text("Lockdown status is not verified by KFN.")
+       }
+      }
+      Text("Development build · 0.2.4")
      }
     }
    }
