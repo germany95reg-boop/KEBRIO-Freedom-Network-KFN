@@ -14,12 +14,33 @@ class WireGuardController private constructor(context: Context) {
  private val backend = GoBackend(context.applicationContext)
  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
  private val lock = Mutex()
+ data class Traffic(val received: Long, val sent: Long)
+ private val _traffic = MutableStateFlow<Traffic?>(null)
+ val traffic = _traffic.asStateFlow()
  private val _status = MutableStateFlow("Disconnected")
  val status = _status.asStateFlow()
  private val tunnel = object : Tunnel {
   override fun getName() = "kfn"
   override fun onStateChange(newState: Tunnel.State) {
    _status.value = if (newState == Tunnel.State.UP) "Tunnel up — remote handshake not verified" else "Disconnected"
+  }
+ }
+ init {
+  scope.launch {
+   while (isActive) {
+    lock.withLock {
+     try {
+      _traffic.value = if (backend.getState(tunnel) == Tunnel.State.UP) {
+       val stats = backend.getStatistics(tunnel)
+       Traffic(stats.totalRx(), stats.totalTx())
+      } else null
+     } catch (e: Exception) {
+      if (e is CancellationException) throw e
+      _traffic.value = null
+     }
+    }
+    delay(2000)
+   }
   }
  }
  fun connect(raw: String) {
@@ -41,6 +62,7 @@ class WireGuardController private constructor(context: Context) {
   scope.launch { lock.withLock {
    try {
     backend.setState(tunnel, Tunnel.State.DOWN, null)
+    _traffic.value = null
     _status.value = "Disconnected"
    } catch (e: Exception) {
     if (e is CancellationException) throw e

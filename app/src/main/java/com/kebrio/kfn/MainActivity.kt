@@ -75,6 +75,7 @@ class MainActivity : ComponentActivity() {
      }
     }
     val status by controller.status.collectAsState()
+    val traffic by controller.traffic.collectAsState()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
      if (VpnService.prepare(this@MainActivity) == null && config.isNotBlank()) {
       controller.connect(config); config = ""
@@ -88,6 +89,9 @@ class MainActivity : ComponentActivity() {
        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("WireGuard", style = MaterialTheme.typography.headlineSmall)
         Text(status)
+        Text("Tunnel traffic", style = MaterialTheme.typography.titleMedium)
+        Text("Received: " + (traffic?.received?.let { android.text.format.Formatter.formatShortFileSize(this@MainActivity, it) } ?: "—"))
+        Text("Sent: " + (traffic?.sent?.let { android.text.format.Formatter.formatShortFileSize(this@MainActivity, it) } ?: "—"))
         Text("Import or paste a configuration from your trusted VPN server. Keys are stored only if you explicitly save a profile.")
         OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }) { Text("Import .conf") }
         if (importError.isNotEmpty()) Text(importError, color = MaterialTheme.colorScheme.error)
@@ -131,7 +135,7 @@ class MainActivity : ComponentActivity() {
         OutlinedButton(onClick = { network = checkNetwork() }) { Text("Refresh") }
        }
       }
-      Text("Development build · 0.2.2")
+      Text("Development build · 0.2.3")
      }
     }
    }
