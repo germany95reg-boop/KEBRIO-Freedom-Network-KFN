@@ -6,7 +6,7 @@ plugins {
 android {
  namespace = "com.kebrio.kfn"
  compileSdk = 35
- defaultConfig { applicationId = "com.kebrio.kfn"; minSdk = 26; targetSdk = 35; versionCode = 8; versionName = "0.2.5" }
+ defaultConfig { applicationId = "com.kebrio.kfn"; minSdk = 26; targetSdk = 35; versionCode = 9; versionName = "0.2.6" }
  buildFeatures { compose = true }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
  kotlinOptions { jvmTarget = "17" }

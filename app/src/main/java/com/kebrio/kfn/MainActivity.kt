@@ -88,6 +88,8 @@ class MainActivity : ComponentActivity() {
     }
     val status by controller.status.collectAsState()
     val traffic by controller.traffic.collectAsState()
+    val adaptive by controller.adaptive.collectAsState()
+    val health by controller.health.collectAsState()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
      if (VpnService.prepare(this@MainActivity) == null && config.isNotBlank()) {
       controller.connect(config, excluded); config = ""
@@ -172,7 +174,18 @@ class MainActivity : ComponentActivity() {
         }
        }
       }
-      Text("Development build · 0.2.5")
+      ElevatedCard(Modifier.fillMaxWidth()) {
+       Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("KFN Adaptive", style = MaterialTheme.typography.titleLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+         Text("Recover stopped tunnel", Modifier.weight(1f))
+         Switch(checked = adaptive, onCheckedChange = controller::setAdaptive)
+        }
+        Text(health)
+        Text("Optional recovery while KFN process is alive. Does not verify remote handshake or guarantee leak protection.")
+       }
+      }
+      Text("Development build · 0.2.6")
      }
     }
    }

@@ -11,6 +11,25 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class WireGuardController private constructor(context: Context) {
+ private val app = context.applicationContext
+ private var activeConfig: Config? = null
+ private var retryAt = 0L
+ private var retryCount = 0
+ private val _adaptive = MutableStateFlow(false)
+ val adaptive = _adaptive.asStateFlow()
+ private val _health = MutableStateFlow("Idle")
+ val health = _health.asStateFlow()
+ fun setAdaptive(enabled: Boolean) {
+  scope.launch { lock.withLock { _adaptive.value = enabled; retryCount = 0; retryAt = 0L } }
+ }
+ private fun underlyingNetworkAvailable(): Boolean {
+  val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+  return cm.allNetworks.any { network ->
+   val caps = cm.getNetworkCapabilities(network)
+   caps != null && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+    !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
+  }
+ }
  private val backend = GoBackend(context.applicationContext)
  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
  private val lock = Mutex()
@@ -32,8 +51,20 @@ class WireGuardController private constructor(context: Context) {
      try {
       _traffic.value = if (backend.getState(tunnel) == Tunnel.State.UP) {
        val stats = backend.getStatistics(tunnel)
+       _health.value = if (stats.totalRx() > 0) "Received peer traffic (not a current reachability test)" else "Waiting for peer traffic"
+       retryCount = 0
        Traffic(stats.totalRx(), stats.totalTx())
-      } else null
+      } else {
+       val cfg = activeConfig
+       val now = android.os.SystemClock.elapsedRealtime()
+       if (_adaptive.value && cfg != null && android.net.VpnService.prepare(app) == null && underlyingNetworkAvailable() && now >= retryAt && retryCount < 5) {
+        retryCount++
+        retryAt = now + (5000L shl (retryCount - 1))
+        _health.value = "Recovery attempt " + retryCount
+        if (backend.setState(tunnel, Tunnel.State.UP, cfg) == Tunnel.State.UP) _status.value = "Tunnel up — remote handshake not verified"
+       } else if (cfg != null) _health.value = if (retryCount >= 5) "Recovery limit reached" else "Tunnel down"
+       null
+      }
      } catch (e: Exception) {
       if (e is CancellationException) throw e
       _traffic.value = null
@@ -60,6 +91,9 @@ class WireGuardController private constructor(context: Context) {
     }
     val config = Config.parse(effective.byteInputStream(Charsets.UTF_8))
     val state = backend.setState(tunnel, Tunnel.State.UP, config)
+    activeConfig = if (state == Tunnel.State.UP) config else null
+    retryCount = 0
+    retryAt = 0L
     _status.value = if (state == Tunnel.State.UP) "Tunnel up — remote handshake not verified" else "Tunnel did not start"
    } catch (e: Exception) {
     if (e is CancellationException) throw e
@@ -70,6 +104,10 @@ class WireGuardController private constructor(context: Context) {
  fun disconnect() {
   scope.launch { lock.withLock {
    try {
+    activeConfig = null
+    retryCount = 0
+    retryAt = 0L
+    _health.value = "Idle"
     backend.setState(tunnel, Tunnel.State.DOWN, null)
     _traffic.value = null
     _status.value = "Disconnected"
