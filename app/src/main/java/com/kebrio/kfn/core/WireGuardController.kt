@@ -68,6 +68,7 @@ class WireGuardController private constructor(context: Context) {
      } catch (e: Exception) {
       if (e is CancellationException) throw e
       _traffic.value = null
+      _health.value = "Tunnel statistics or recovery unavailable"
      }
     }
     delay(2000)
@@ -79,7 +80,7 @@ class WireGuardController private constructor(context: Context) {
    try {
     if (backend.getState(tunnel) == Tunnel.State.UP) return@withLock
     _status.value = "Starting tunnel"
-    require(raw.length in 1..65536)
+    require(raw.toByteArray(Charsets.UTF_8).size in 1..65536)
     require(ConfigProtocol.detect(raw) == Protocol.WIREGUARD)
     val effective = if (excludedPackages.isEmpty()) raw else {
      require(excludedPackages.all { it.matches(Regex("[A-Za-z0-9_.]+")) })
@@ -98,6 +99,10 @@ class WireGuardController private constructor(context: Context) {
     _status.value = if (state == Tunnel.State.UP) "Tunnel up — remote handshake not verified" else "Tunnel did not start"
    } catch (e: Exception) {
     if (e is CancellationException) throw e
+    activeConfig = null
+    retryCount = 0
+    retryAt = 0L
+    _health.value = "Connection failed"
     _status.value = "Connection failed — check configuration and VPN permission"
    }
   } }
