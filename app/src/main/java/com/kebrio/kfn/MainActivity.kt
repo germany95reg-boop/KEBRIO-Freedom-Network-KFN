@@ -1,13 +1,14 @@
 package com.kebrio.kfn
+
 import android.os.Bundle
-import android.net.VpnService
-import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.VpnService
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,27 +16,39 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.kebrio.kfn.core.WireGuardController
 
 class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  val controller = WireGuardController.get(this)
   setContent {
    MaterialTheme(colorScheme = darkColorScheme()) {
     var network by remember { mutableStateOf(checkNetwork()) }
-    var vpnPermission by remember { mutableStateOf(VpnService.prepare(this@MainActivity) == null) }
-    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { vpnPermission = VpnService.prepare(this@MainActivity) == null }
-    Surface(modifier = Modifier.fillMaxSize()) {
-     Column(Modifier.safeDrawingPadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    var config by remember { mutableStateOf("") }
+    val status by controller.status.collectAsState()
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+     if (VpnService.prepare(this@MainActivity) == null && config.isNotBlank()) {
+      controller.connect(config); config = ""
+     }
+    }
+    Surface(Modifier.fillMaxSize()) {
+     Column(Modifier.safeDrawingPadding().imePadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Text("KEBRIO", style = MaterialTheme.typography.headlineLarge)
       Text("FREEDOM NETWORK", style = MaterialTheme.typography.labelLarge)
       ElevatedCard(Modifier.fillMaxWidth()) {
        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("VPN disconnected", style = MaterialTheme.typography.headlineSmall)
-        Text("No tunnel engine configured yet.")
-        Text(if (vpnPermission) "VPN permission granted" else "VPN permission not granted")
-        OutlinedButton(onClick = { val intent = VpnService.prepare(this@MainActivity); if (intent == null) vpnPermission = true else permissionLauncher.launch(intent) }) { Text("Check VPN permission") }
-        Button(onClick = {}, enabled = false) { Text("Connect") }
+        Text("WireGuard", style = MaterialTheme.typography.headlineSmall)
+        Text(status)
+        Text("Paste a configuration from your trusted VPN server. Keys are not saved by KFN.")
+        OutlinedTextField(value = config, onValueChange = { if (it.length <= 65536) config = it }, label = { Text("WireGuard configuration") }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6, visualTransformation = PasswordVisualTransformation())
+        Button(onClick = {
+         val intent = VpnService.prepare(this@MainActivity)
+         if (intent == null) { controller.connect(config); config = "" } else launcher.launch(intent)
+        }, enabled = config.isNotBlank() && !status.startsWith("Tunnel up") && status != "Starting tunnel") { Text("Connect") }
+        OutlinedButton(onClick = { controller.disconnect() }) { Text("Disconnect") }
        }
       }
       ElevatedCard(Modifier.fillMaxWidth()) {
@@ -45,7 +58,7 @@ class MainActivity : ComponentActivity() {
         OutlinedButton(onClick = { network = checkNetwork() }) { Text("Refresh") }
        }
       }
-      Text("Development build · 0.1.1")
+      Text("Development build · 0.2.0")
      }
     }
    }
