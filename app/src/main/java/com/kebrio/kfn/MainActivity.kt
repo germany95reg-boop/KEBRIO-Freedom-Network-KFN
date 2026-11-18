@@ -1,10 +1,13 @@
 package com.kebrio.kfn
 import android.os.Bundle
+import android.net.VpnService
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,6 +23,8 @@ class MainActivity : ComponentActivity() {
   setContent {
    MaterialTheme(colorScheme = darkColorScheme()) {
     var network by remember { mutableStateOf(checkNetwork()) }
+    var vpnPermission by remember { mutableStateOf(VpnService.prepare(this@MainActivity) == null) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { vpnPermission = VpnService.prepare(this@MainActivity) == null }
     Surface(modifier = Modifier.fillMaxSize()) {
      Column(Modifier.safeDrawingPadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Text("KEBRIO", style = MaterialTheme.typography.headlineLarge)
@@ -28,6 +33,8 @@ class MainActivity : ComponentActivity() {
        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("VPN disconnected", style = MaterialTheme.typography.headlineSmall)
         Text("No tunnel engine configured yet.")
+        Text(if (vpnPermission) "VPN permission granted" else "VPN permission not granted")
+        OutlinedButton(onClick = { val intent = VpnService.prepare(this@MainActivity); if (intent == null) vpnPermission = true else permissionLauncher.launch(intent) }) { Text("Check VPN permission") }
         Button(onClick = {}, enabled = false) { Text("Connect") }
        }
       }
@@ -38,7 +45,7 @@ class MainActivity : ComponentActivity() {
         OutlinedButton(onClick = { network = checkNetwork() }) { Text("Refresh") }
        }
       }
-      Text("Development build · 0.1.0")
+      Text("Development build · 0.1.1")
      }
     }
    }
