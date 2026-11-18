@@ -1,6 +1,10 @@
 package com.kebrio.kfn
 
 import android.os.Bundle
+import android.view.WindowManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -23,11 +27,38 @@ import com.kebrio.kfn.core.WireGuardController
 class MainActivity : ComponentActivity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
   val controller = WireGuardController.get(this)
   setContent {
    MaterialTheme(colorScheme = darkColorScheme()) {
     var network by remember { mutableStateOf(checkNetwork()) }
     var config by remember { mutableStateOf("") }
+    var importError by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+     if (uri != null) scope.launch {
+      try {
+       val raw = withContext(Dispatchers.IO) {
+        contentResolver.openInputStream(uri)?.use { input ->
+         val output = java.io.ByteArrayOutputStream()
+         val buffer = ByteArray(4096)
+         while (true) {
+          val count = input.read(buffer)
+          if (count < 0) break
+          require(output.size() + count <= 65536)
+          output.write(buffer, 0, count)
+         }
+         output.toString("UTF-8")
+        } ?: error("Cannot open file")
+       }
+       config = raw
+       importError = ""
+      } catch (e: Exception) {
+       if (e is kotlinx.coroutines.CancellationException) throw e
+       importError = "Cannot import configuration (maximum 64 KiB)"
+      }
+     }
+    }
     val status by controller.status.collectAsState()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
      if (VpnService.prepare(this@MainActivity) == null && config.isNotBlank()) {
@@ -42,7 +73,9 @@ class MainActivity : ComponentActivity() {
        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("WireGuard", style = MaterialTheme.typography.headlineSmall)
         Text(status)
-        Text("Paste a configuration from your trusted VPN server. Keys are not saved by KFN.")
+        Text("Import or paste a configuration from your trusted VPN server. Keys are not saved by KFN.")
+        OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }) { Text("Import .conf") }
+        if (importError.isNotEmpty()) Text(importError, color = MaterialTheme.colorScheme.error)
         OutlinedTextField(value = config, onValueChange = { if (it.length <= 65536) config = it }, label = { Text("WireGuard configuration") }, modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6, visualTransformation = PasswordVisualTransformation())
         Button(onClick = {
          val intent = VpnService.prepare(this@MainActivity)
@@ -58,7 +91,7 @@ class MainActivity : ComponentActivity() {
         OutlinedButton(onClick = { network = checkNetwork() }) { Text("Refresh") }
        }
       }
-      Text("Development build · 0.2.0")
+      Text("Development build · 0.2.1")
      }
     }
    }
