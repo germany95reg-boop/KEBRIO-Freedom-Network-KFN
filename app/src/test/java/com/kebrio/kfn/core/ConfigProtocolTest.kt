@@ -20,6 +20,13 @@ class ConfigProtocolTest {
   assertEquals(Protocol.VLESS, ConfigProtocol.detect("vless://example"))
   assertEquals(Protocol.SHADOWSOCKS, ConfigProtocol.detect("ss://example"))
  }
+ @Test fun importedBom() {
+  assertEquals(Protocol.WIREGUARD, ConfigProtocol.detect("\uFEFF[Interface]"))
+ }
+ @Test fun oversizedInput() {
+  assertNull(ConfigProtocol.detect("vless://" + "a".repeat(65536)))
+  assertNull(ConfigProtocol.detect("[Interface]\n#" + "я".repeat(32768)))
+ }
  @Test fun unknown() {
   assertNull(ConfigProtocol.detect(""))
   assertNull(ConfigProtocol.detect("https://example.invalid"))
